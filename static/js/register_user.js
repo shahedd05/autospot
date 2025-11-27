@@ -18,11 +18,13 @@ document.addEventListener("DOMContentLoaded", function () {
   let timeLeft = 60;
   let registeredUsername = ""; // ✅ تخزين اسم المستخدم
 
+  // ✅ زر الترجمة
   translateOption.addEventListener("click", function () {
     isArabic = !isArabic;
     applyTranslation();
   });
 
+  // ✅ دالة الترجمة
   function applyTranslation() {
     document.querySelector("#registerBox h1").textContent = isArabic ? "إنشاء حساب" : "Create Account";
     fullname.placeholder = isArabic ? "اسم المستخدم" : "Username";
@@ -31,20 +33,21 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmPassword.placeholder = isArabic ? "تأكيد كلمة المرور" : "Confirm password";
     document.querySelector("#registerForm button[type='submit']").textContent = isArabic ? "تسجيل" : "Sign Up";
     document.querySelector("#registerBox h4").innerHTML = isArabic
-      ? "هل لديك حساب بالفعل؟ <a href='userlogin.html'>تسجيل الدخول</a>"
-      : "Already have an account? <a href='userlogin.html'>Login</a>";
+      ? "هل لديك حساب بالفعل؟ <a href='/login_user'>تسجيل الدخول</a>"
+      : "Already have an account? <a href='/login_user'>Login</a>";
     passwordError.textContent = isArabic
       ? "كلمتا المرور غير متطابقتين!"
       : "Passwords do not match!";
     otpTitle.textContent = isArabic ? "أدخل رمز التحقق" : "Enter Verification Code";
     otpMessage.textContent = isArabic
-      ? "رمز التحقق هو 1234 (تجريبي)"
-      : "Your verification code is 1234 (demo)";
+      ? "✅ تم إرسال رمز التحقق إلى بريدك الإلكتروني  1234"
+      : "✅ The verification code has been sent to your email and it is 1234 ";
     confirmOtpBtn.textContent = isArabic ? "تأكيد" : "Confirm";
     resendBtn.textContent = isArabic ? "إعادة إرسال الرمز" : "Resend Code";
     translateOption.textContent = isArabic ? "🌐 English" : "🌐 العربية";
   }
 
+  // ✅ إرسال بيانات التسجيل
   registerForm.addEventListener("submit", function (e) {
     e.preventDefault();
 
@@ -71,20 +74,31 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     .then(res => res.json())
     .then(data => {
-      if (data.error) {
-        alert(data.error);
-      } else {
+      if (data.success) {
+        alert(isArabic 
+          ? "✅ تم إنشاء الحساب بنجاح! يرجى إدخال رمز التحقق لإكمال العملية." 
+          : "✅ Account created successfully! Please enter the verification code to complete the process."
+        );
+
         registerBox.style.display = "none";
         otpBox.style.display = "block";
+
+        otpMessage.textContent = isArabic
+          ? "✅ تم إرسال رمز التحقق إلى بريدك الإلكتروني وهو 1234 (تجريبي)"
+          : "✅ The verification code has been sent to your email and it is 1234 (demo)";
+
         startTimer();
+      } else {
+        alert(data.error || (isArabic ? "❌ فشل إنشاء الحساب" : "❌ Account creation failed"));
       }
     })
     .catch(err => {
-      alert("Server error. Please try again.");
+      alert(isArabic ? "❌ خطأ في السيرفر. حاول مرة أخرى." : "❌ Server error. Please try again.");
       console.error(err);
     });
   });
 
+  // ✅ مؤقت OTP
   function startTimer() {
     timeLeft = 60;
     resendBtn.disabled = true;
@@ -106,27 +120,30 @@ document.addEventListener("DOMContentLoaded", function () {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   }
 
+  // ✅ إعادة إرسال OTP (تعريف واحد فقط)
   resendBtn.addEventListener("click", async function () {
-    const email = document.getElementById("email").value;
-
+    const username = registeredUsername; // الاسم اللي خزنتيه بعد التسجيل
     const response = await fetch("http://localhost:5000/resend/otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ username })
     });
-
     const result = await response.json();
     alert(result.message || result.error);
+
+    otpMessage.textContent = isArabic
+    ? "🔄 تم إعادة إرسال الرمز بنجاح (1234)" : "🔄 OTP resent successfully (1234)";
     startTimer();
   });
 
+  // ✅ تأكيد OTP
   confirmOtpBtn.addEventListener("click", async function () {
     const otpCode = Array.from(otpInputs).map(input => input.value).join("");
 
     const response = await fetch("http://localhost:5000/verify/otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: registeredUsername, otp: otpCode }) // ✅ إرسال الاسم المحفوظ
+      body: JSON.stringify({ username: registeredUsername, otp: otpCode })
     });
 
     const result = await response.json();
@@ -135,10 +152,11 @@ document.addEventListener("DOMContentLoaded", function () {
       alert(isArabic ? "✅ تم التحقق من الحساب بنجاح!" : "✅ Account verified successfully!");
       window.location.href = "/dashboard";
     } else {
-      alert(result.error || "OTP verification failed.");
+      alert(result.error || (isArabic ? "❌ فشل التحقق من الرمز" : "❌ OTP verification failed"));
     }
   });
 
+  // ✅ إدخال OTP
   otpInputs.forEach((input, index) => {
     input.addEventListener("input", () => {
       if (input.value.length === 1 && index < otpInputs.length - 1) otpInputs[index + 1].focus();
@@ -152,4 +170,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function checkOtpFilled() {
     confirmOtpBtn.disabled = ![...otpInputs].every(input => input.value.trim() !== "");
   }
+
+  // ✅ تفعيل الترجمة عند التحميل
+  applyTranslation();
 });

@@ -1,44 +1,62 @@
 from flask import Blueprint, request, jsonify, current_app
+import MySQLdb.cursors
+from datetime import datetime
 
-verify_bp = Blueprint('verify_otp', __name__, url_prefix='/verify')
+verify_otp_bp = Blueprint('verify_otp', __name__, url_prefix='/verify')
 
-@verify_bp.route('/otp', methods=['POST'])
+@verify_otp_bp.route('/otp', methods=['POST'])
 def verify_otp():
-    return jsonify({'success': True, 'message': 'OTP route is working'})
+    mysql = current_app.config.get("MYSQL")
+    if not mysql:
+        return jsonify({'success': False, 'error': 'Database connection not initialized'}), 500
 
-    if not username or not otp:
-        return jsonify({'success': False, 'error': 'Username and OTP are required'}), 400
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    data = request.get_json(silent=True) or {}
 
-    try:
-        mysql = current_app.config["MYSQL"]
-        cursor = mysql.connection.cursor()
+    username = (data.get('username') or '').strip()
+    otp = (data.get('otp') or '').strip()
 
-        # ✅ جلب بيانات المستخدم من جدول pending_users
-        cursor.execute("SELECT email, password FROM pending_users WHERE username = %s", (username,))
-        user = cursor.fetchone()
+    if otp != "1234":
+        return jsonify({'success': False, 'error': 'Invalid OTP'}), 400
 
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
+    # ✅ أولاً نبحث في جدول pending_users
+    cursor.execute("SELECT * FROM pending_users WHERE username=%s LIMIT 1", (username,))
+    pending_user = cursor.fetchone()
 
-        # ✅ تحقق من أن الكود المدخل يساوي 1234
-        if otp != "1234":
-            return jsonify({'success': False, 'error': 'Incorrect OTP'}), 401
+    if pending_user:
+        try:
+            # نقل الحساب إلى users
+            cursor.execute("""
+                INSERT INTO users (username, email, password_hash, created_at, otp_verified)
+                VALUES (%s, %s, %s, %s, TRUE)
+            """, (
+                pending_user['username'],
+                pending_user['email'],
+                pending_user['password_hash'],
+                datetime.now()
+            ))
 
-        # ✅ تحقق من أن البريد غير موجود مسبقًا في جدول users
-        cursor.execute("SELECT * FROM users WHERE email = %s", (user['email'],))
-        if cursor.fetchone():
-            return jsonify({'success': False, 'error': 'Email already activated'}), 400
+            cursor.execute("DELETE FROM pending_users WHERE id=%s", (pending_user['id'],))
+            mysql.connection.commit()
 
-        # ✅ نقل المستخدم من pending_users إلى users
-        cursor.execute("""
-            INSERT INTO users (username, email, password)
-            SELECT username, email, password FROM pending_users WHERE username = %s
-        """, (username,))
-        cursor.execute("DELETE FROM pending_users WHERE username = %s", (username,))
-        mysql.connection.commit()
+            return jsonify({'success': True, 'message': 'Account verified and activated'}), 200
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            cursor.close()
+        return
 
-        return jsonify({'success': True, 'message': 'OTP verified and account activated'}), 200
+    # ✅ إذا مش موجود في pending_users، نبحث في users
+    cursor.execute("SELECT * FROM users WHERE username=%s LIMIT 1", (username,))
+    user = cursor.fetchone()
 
-    except Exception as e:
-        print("❌ OTP error:", e)
-        return jsonify({'success': False, 'error': str(e)}), 500
+    if user:
+        # تحقق من الـ OTP المخزن
+        if otp == "1234":  # ثابت للتجربة
+            cursor.execute("UPDATE users SET otp_verified=TRUE WHERE id=%s", (user['id'],))
+            mysql.connection.commit()
+            return jsonify({'success': True, 'message': 'Login verified successfully'}), 200
+        else:
+            return jsonify({'success': False, 'error': 'Invalid OTP'}), 400
+
+    return jsonify({'success': False, 'error': 'User not found'}), 404

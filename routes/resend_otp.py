@@ -1,37 +1,52 @@
 from flask import Blueprint, request, jsonify, current_app
+import MySQLdb.cursors
 from datetime import datetime, timedelta
 
 resend_bp = Blueprint('resend', __name__, url_prefix='/resend')
 
 @resend_bp.route('/otp', methods=['POST'])
 def resend_otp():
-    mysql = current_app.config.get("MYSQL")
-    if not mysql:
-        return jsonify({'error': 'Database connection not initialized'}), 500
+    cursor = None
+    try:
+        data = request.get_json(silent=True) or {}
+        username = (data.get('username') or '').strip()
 
-    cursor = mysql.connection.cursor()
-    data = request.get_json()
-    email = data.get('email')
+        if not username:
+            return jsonify({'success': False, 'error': 'Username is required'}), 400
 
-    if not email:
-        return jsonify({'error': 'Email is required'}), 400
+        mysql = current_app.config["MYSQL"]
+        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
 
-    # تحقق من وجود المستخدم في pending_users
-    cursor.execute("SELECT username FROM pending_users WHERE email=%s", (email,))
-    user = cursor.fetchone()
+        # ✅ أولاً نبحث في pending_users
+        cursor.execute("SELECT id FROM pending_users WHERE username=%s", (username,))
+        pending_user = cursor.fetchone()
 
-    if not user:
-        return jsonify({'error': 'No pending registration found for this email'}), 404
+        if pending_user:
+            otp = "1234"
+            expiry = datetime.now() + timedelta(minutes=5)
+            cursor.execute("UPDATE pending_users SET otp_code=%s, otp_expiry=%s WHERE id=%s",
+                           (otp, expiry, pending_user['id']))
+            mysql.connection.commit()
+            return jsonify({'success': True, 'message': 'OTP resent for pending user'}), 200
 
-    # تحديث الكود الثابت في قاعدة البيانات
-    otp_code = "1234"
-    otp_expiry = datetime.now() + timedelta(minutes=5)
+        # ✅ إذا مش موجود في pending_users، نبحث في users
+        cursor.execute("SELECT id FROM users WHERE username=%s", (username,))
+        user = cursor.fetchone()
 
-    cursor.execute("""
-        UPDATE pending_users SET otp_code=%s, otp_expiry=%s, attempts=0
-        WHERE email=%s
-    """, (otp_code, otp_expiry, email))
-    mysql.connection.commit()
+        if user:
+            otp = "1234"
+            expiry = datetime.now() + timedelta(minutes=5)
+            cursor.execute("UPDATE users SET otp_code=%s, otp_expiry=%s, otp_verified=FALSE WHERE id=%s",
+                           (otp, expiry, user['id']))
+            mysql.connection.commit()
+            return jsonify({'success': True, 'message': 'OTP resent for active user'}), 200
 
-    cursor.close()
-    return jsonify({'message': 'OTP reset to 1234'}), 200
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    except Exception as e:
+        print("❌ Resend OTP error:", type(e).__name__, str(e))
+        return jsonify({'success': False, 'error': 'Server error. Please try again later.'}), 500
+
+    finally:
+        if cursor:
+            cursor.close()

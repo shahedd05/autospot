@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app, render_template
-from db import init_db
 from werkzeug.security import generate_password_hash
+import MySQLdb.cursors
 
-# المسار الأساسي للـ Blueprint
 reset_bp = Blueprint('reset', __name__, url_prefix='/reset_password')
 
 # عرض صفحة إعادة تعيين كلمة المرور
@@ -13,46 +12,50 @@ def show_reset_page():
 # تحديث كلمة المرور بناءً على اسم المستخدم
 @reset_bp.route('/update-password', methods=['POST'])
 def update_password():
+    cursor = None
     try:
-        print("🔧 Request received")
-        print("🔧 Raw data:", request.data)
+        data = request.get_json(silent=True) or {}
 
-        data = request.get_json()
-        print("🔧 Parsed JSON:", data)
+        username = (data.get('username') or '').strip()
+        new_password = (data.get('newPassword') or '').strip()
+        confirm_password = (data.get('confirmPassword') or '').strip()
 
-        if not data:
-            return jsonify({'error': 'Invalid or missing JSON'}), 400
-
-        username = data.get('username')
-        new_password = data.get('newPassword')
-        confirm_password = data.get('confirmPassword')
-
-        print("🔧 username:", username)
-        print("🔧 new_password:", new_password)
-        print("🔧 confirm_password:", confirm_password)
-
+        # ✅ تحقق من الحقول
         if not username or not new_password or not confirm_password:
-            return jsonify({'error': 'All fields are required'}), 400
+            return jsonify({'success': False, 'error': 'All fields are required'}), 400
 
         if new_password != confirm_password:
-            return jsonify({'error': 'Passwords do not match'}), 400
+            return jsonify({'success': False, 'error': 'Passwords do not match'}), 400
 
-        mysql = current_app.config["MYSQL"]
-        print("🔧 DB initialized:", mysql)
+        mysql = current_app.config.get("MYSQL")
+        if not mysql:
+            return jsonify({'success': False, 'error': 'Database connection not initialized'}), 500
 
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        cursor.execute("SELECT id, otp_verified FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
 
         if not user:
-            return jsonify({'error': 'Username not found'}), 404
+            return jsonify({'success': False, 'error': 'Username not found'}), 404
 
+        # ✅ تحقق أن المستخدم أدخل OTP صحيح قبل السماح بالتغيير
+        if not user.get('otp_verified'):
+            return jsonify({'success': False, 'error': 'OTP verification required before resetting password'}), 403
+
+        # ✅ تشفير كلمة المرور الجديدة
         hashed_password = generate_password_hash(new_password)
-        cursor.execute("UPDATE users SET password = %s WHERE username = %s", (hashed_password, username))
+
+        # ✅ تحديث كلمة المرور وإعادة تعيين حالة otp_verified
+        cursor.execute("UPDATE users SET password_hash = %s, otp_verified = FALSE WHERE username = %s",
+                       (hashed_password, username))
         mysql.connection.commit()
 
-        return jsonify({'message': 'Password updated successfully'}), 200
+        return jsonify({'success': True, 'message': 'Password updated successfully'}), 200
 
     except Exception as e:
-        print("🔧 mysql.connection:", mysql.connection)
-        return jsonify({'error': 'Server error. Please try again later.'}), 500
+        print("❌ Reset password error:", type(e).__name__, str(e))
+        return jsonify({'success': False, 'error': 'Server error. Please try again later.'}), 500
+
+    finally:
+        if cursor:
+            cursor.close()

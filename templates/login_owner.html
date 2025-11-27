@@ -5,7 +5,7 @@
   <title>autoSpot</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/login_user.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login_owner.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
       <div class="logo-text">autoSpot</div>
     </div>
     <div class="nav-links">
-      <a href="/">Home</a>
+      <a href="index.html">Home</a>
       <div class="dropdown" id="menuDropdown">
         <a href="javascript:void(0);" class="menu-toggle"><i class="fas fa-bars"></i></a>
         <div class="dropdown-content scrollable-dropdown">
@@ -49,27 +49,24 @@
     </div>
   </div>
 
-  <!-- Main Content -->
-  <main class="content">
-    <div class="container">
-      <!-- Login Box -->
-      <div class="box" id="loginBox">
-        <h1 id="loginTitle">Login</h1>
-        <form id="loginForm">
-          <input type="text" id="username" placeholder="Username" required>
-          <input type="password" id="password" placeholder="Password" required>
-          <div class="options">
-            <label id="rememberMeLabel">
-              <input type="checkbox" id="rememberMe">
-              <span id="rememberMeText">Remember Me</span>
-            </label>
-            <a href="{{ url_for('register_user.register_user') }}"id="forgotPassword">Forgot Password?</a>
-          </div>
-          <button type="submit" id="loginBtn">Login</button>
-        </form>
-        <h4 id="createAccountText">Don't have an account? <a href="{{ url_for('pages.register_user_page') }}">Create one</a></h4>
-
-      </div>
+ <!-- Login Box -->
+ <div class="container">
+    <div class="box" id="loginBox">
+      <h1 id="loginTitle">Login</h1>
+      <form id="loginForm">
+        <input type="text" id="registerNumber" placeholder="Register Number" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <div class="options">
+          <label id="rememberMeLabel">
+            <input type="checkbox" id="rememberMe">
+            <span id="rememberMeText">Remember Me</span>
+          </label>
+         <a> <span id="forgotPassword" class="clickable">Forgot Password?</span></a>
+        </div>
+        <button type="submit" id="loginBtn">Login</button>
+      </form>
+      <h4 id="createAccountText">Don't have an account? <a href="/verify_company" id="createAccountLink">Create one</a></h4>
+    </div>
 
       <!-- OTP Box -->
       <div class="box" id="otpBox" style="display: none;">
@@ -89,9 +86,10 @@
         <button id="resendOtpBtn" disabled>Resend Code</button>
       </div>
     </div>
-  </main>
 
-  <!-- Footer -->
+  </main>
+   
+   <!-- Footer -->
   <div class="site-footer">
     <div class="social-icons">
       <a href="#"><i class="fab fa-instagram"></i></a>
@@ -106,6 +104,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/base.js') }}"></script>
-<script src="{{ url_for('static', filename='js/login_user.js') }}"></script>
+<script src="{{ url_for('static', filename='js/login_owner.js') }}"></script>
 </body>
 </html>
